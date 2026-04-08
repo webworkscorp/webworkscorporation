@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Google AI Studio App</title>
+    <script>
+      // Workaround for environments where fetch is a getter-only property
+      // and a library tries to polyfill or reassign it.
+      try {
+        const originalFetch = window.fetch;
+        const descriptor = Object.getOwnPropertyDescriptor(window, 'fetch');
+        if (!descriptor || descriptor.configurable) {
+          Object.defineProperty(window, 'fetch', {
+            get: function() { return originalFetch; },
+            set: function(val) { 
+              console.warn('Ignored attempt to reassign window.fetch'); 
+            },
+            configurable: true
+          });
+        }
+      } catch (e) {
+        console.error('Failed to apply fetch workaround:', e);
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
