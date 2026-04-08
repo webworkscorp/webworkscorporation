@@ -10,6 +10,7 @@ import { Sparkles, ArrowRight, Cpu, BarChart3, Zap, ShieldCheck, Quote, Star, Ch
 import Hls from 'hls.js';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import Blogs from './Blogs';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -598,8 +599,36 @@ const Footer = () => {
 };
 
 export default function App() {
+  const [showBlog, setShowBlog] = useState(false);
+
+  if (showBlog) {
+    return (
+      <div className="bg-[#070612] min-h-screen">
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <button 
+            onClick={() => setShowBlog(false)}
+            className="text-beige/60 hover:text-beige transition-colors text-sm font-medium flex items-center gap-2"
+          >
+            ← Volver al inicio
+          </button>
+        </div>
+        <Blogs />
+      </div>
+    );
+  }
+
   return (
     <div className="bg-[#070612] text-beige selection:bg-beige/20">
+      {/* Floating Blog Button */}
+      <div className="fixed top-6 right-6 z-50">
+        <button 
+          onClick={() => setShowBlog(true)}
+          className="px-6 py-2 rounded-full bg-beige/10 backdrop-blur-md border border-beige/20 text-beige text-sm font-medium hover:bg-beige/20 transition-colors"
+        >
+          Ver Blog
+        </button>
+      </div>
+
       {/* Hero Section */}
       <section className="relative w-full h-screen overflow-hidden flex items-center">
         {/* Background Video */}
