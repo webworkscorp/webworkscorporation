@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react";
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const SITE_TOPIC = import.meta.env.VITE_SITE_TOPIC || "servicios web y diseño digital en Costa Rica";
 const MAX_POSTS = 2;
-const INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
+const INTERVAL_MS = 60 * 1000; // 1 minuto
 // ───────────────────────────────────────────────────────────────────────────────
 
 interface BlogPost {
@@ -50,7 +50,7 @@ REGLAS:
 - Tono profesional pero cercano, orientado a pymes costarricenses
 - Incluir al menos 2 subtítulos h2 y 1 h3
 - Terminar con párrafo de conclusión
-- imageKeyword: 2 palabras en INGLÉS para buscar imagen (ej: "web design", "digital marketing")
+- imagePrompt: Un prompt detallado en INGLÉS para generar una imagen fotorrealista con IA que ilustre el artículo con alta coherencia visual (ej: "A modern office desk with a laptop displaying growth charts, bright natural light, cinematic, photorealistic").
 - tags: array de 3 etiquetas cortas en español
 
 Responde ÚNICAMENTE con JSON válido, sin markdown ni backticks:
@@ -58,12 +58,12 @@ Responde ÚNICAMENTE con JSON válido, sin markdown ni backticks:
   "title": "...",
   "excerpt": "...",
   "content": "...",
-  "imageKeyword": "...",
+  "imagePrompt": "...",
   "tags": ["...", "...", "..."]
 }`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -87,8 +87,9 @@ Responde ÚNICAMENTE con JSON válido, sin markdown ni backticks:
   const words = parsed.content.replace(/<[^>]+>/g, "").split(/\s+/).length;
   const readTime = `${Math.max(2, Math.ceil(words / 200))} min`;
 
-  const seed = encodeURIComponent(parsed.imageKeyword || "business");
-  const imageUrl = `https://source.unsplash.com/800x450/?${seed}&sig=${Date.now()}`;
+  // Usamos Pollinations AI para generar una imagen coherente basada en el prompt exacto de Gemini
+  const seed = encodeURIComponent(parsed.imagePrompt || "business technology modern office");
+  const imageUrl = `https://image.pollinations.ai/prompt/${seed}?width=800&height=450&nologo=true`;
 
   return {
     id: `post-${Date.now()}-${index}`,
@@ -102,98 +103,108 @@ Responde ÚNICAMENTE con JSON válido, sin markdown ni backticks:
   };
 }
 
-export default function Blogs() {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<"idle" | "generating" | "waiting" | "done">("idle");
-  const [countdown, setCountdown] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const countRef = useRef<ReturnType<typeof setInterval> | null>(null);
+const DEFAULT_POST: BlogPost = {
+  id: "post-default-1",
+  title: "La importancia del diseño web profesional para tu negocio",
+  excerpt: "Descubre cómo un sitio web bien diseñado puede transformar tu negocio, atraer más clientes y destacar frente a la competencia en el mercado digital actual.",
+  content: "<h2>El impacto de la primera impresión digital</h2><p>En el mundo actual, tu sitio web es la vitrina principal de tu negocio. Los clientes buscan servicios en línea antes de tomar una decisión de compra. Un diseño web profesional no solo transmite confianza, sino que también facilita la navegación y mejora la experiencia del usuario.</p><h2>¿Por qué invertir en diseño web?</h2><p>Muchos negocios subestiman el poder de una buena presencia digital. Sin embargo, un sitio web optimizado ayuda a mejorar el posicionamiento en buscadores (SEO), lo que significa que más personas te encontrarán cuando busquen los servicios que ofreces.</p><ul><li><strong>Credibilidad:</strong> Un diseño moderno y limpio demuestra profesionalismo.</li><li><strong>Disponibilidad 24/7:</strong> Tu negocio siempre está abierto para recibir consultas.</li><li><strong>Alcance:</strong> Rompe las barreras geográficas y llega a nuevos mercados.</li></ul><h3>Conclusión</h3><p>Invertir en un diseño web profesional es invertir en el futuro de tu empresa. No dejes que tu competencia se lleve a tus clientes potenciales. ¡Es hora de dar el salto digital y consolidar tu presencia en línea!</p>",
+  imageUrl: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+  createdAt: getCRTime(),
+  readTime: "3 min",
+  tags: ["Diseño Web", "Estrategia", "Negocios"]
+};
 
-  useEffect(() => {
+export default function Blogs() {
+  const [posts, setPosts] = useState<BlogPost[]>(() => {
     const saved = localStorage.getItem("seo-blog-posts");
     if (saved) {
       try {
-        const parsed: BlogPost[] = JSON.parse(saved);
-        setPosts(parsed);
-        if (parsed.length >= MAX_POSTS) setStatus("done");
+        const parsed = JSON.parse(saved);
+        if (parsed.length > 0) return parsed;
       } catch {}
     }
-  }, []);
+    return [DEFAULT_POST];
+  });
+  
+  const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
+  const [incubatedPost, setIncubatedPost] = useState<BlogPost | null>(null);
+  const [isIncubating, setIsIncubating] = useState(false);
+  
+  const [countdown, setCountdown] = useState(() => posts.length < MAX_POSTS ? INTERVAL_MS / 1000 : 0);
 
   useEffect(() => {
-    if (posts.length > 0) {
-      localStorage.setItem("seo-blog-posts", JSON.stringify(posts));
-    }
+    localStorage.setItem("seo-blog-posts", JSON.stringify(posts));
   }, [posts]);
 
-  const generate = async (index: number) => {
-    if (!GEMINI_API_KEY) {
-      console.error("Falta VITE_GEMINI_API_KEY en variables de entorno");
-      return;
-    }
-    setLoading(true);
-    setStatus("generating");
-    try {
-      const post = await generatePost(SITE_TOPIC, index);
-      setPosts((prev) => [...prev, post]);
-    } catch (e) {
-      console.error("Error generando post:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Incubadora: Genera el post en segundo plano si hace falta
   useEffect(() => {
-    const saved = localStorage.getItem("seo-blog-posts");
-    const existing: BlogPost[] = saved ? JSON.parse(saved) : [];
-
-    if (existing.length === 0) {
-      generate(0).then(() => {
-        setStatus("waiting");
-        setCountdown(INTERVAL_MS / 1000);
-
-        countRef.current = setInterval(() => {
-          setCountdown((c) => {
-            if (c <= 1) { clearInterval(countRef.current!); return 0; }
-            return c - 1;
-          });
-        }, 1000);
-
-        timerRef.current = setTimeout(() => {
-          generate(1).then(() => setStatus("done"));
-        }, INTERVAL_MS);
+    if (posts.length >= MAX_POSTS) return;
+    if (!incubatedPost && !isIncubating && GEMINI_API_KEY) {
+      setIsIncubating(true);
+      generatePost(SITE_TOPIC, posts.length).then(post => {
+        setIncubatedPost(post);
+        setIsIncubating(false);
+      }).catch(e => {
+        console.error("Error incubando post:", e);
+        setIsIncubating(false);
       });
-    } else if (existing.length === 1) {
-      setStatus("waiting");
-      setCountdown(INTERVAL_MS / 1000);
-
-      countRef.current = setInterval(() => {
-        setCountdown((c) => {
-          if (c <= 1) { clearInterval(countRef.current!); return 0; }
-          return c - 1;
-        });
-      }, 1000);
-
-      timerRef.current = setTimeout(() => {
-        generate(1).then(() => setStatus("done"));
-      }, INTERVAL_MS);
-    } else {
-      setStatus("done");
     }
+  }, [posts.length, incubatedPost, isIncubating]);
 
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (countRef.current) clearInterval(countRef.current);
-    };
-  }, []);
+  // Temporizador
+  useEffect(() => {
+    if (posts.length >= MAX_POSTS) return;
+
+    const timer = setInterval(() => {
+      setCountdown(c => Math.max(0, c - 1));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [posts.length]);
+
+  // Publicador: Sube el post cuando el contador llega a 0 y la incubadora terminó
+  useEffect(() => {
+    if (countdown === 0 && posts.length < MAX_POSTS) {
+      if (incubatedPost) {
+        setPosts(prev => [...prev, incubatedPost]);
+        setIncubatedPost(null);
+        if (posts.length + 1 < MAX_POSTS) {
+          setCountdown(INTERVAL_MS / 1000);
+        }
+      }
+    }
+  }, [countdown, incubatedPost, posts.length]);
 
   const formatCountdown = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = s % 60;
     return `${m}:${sec.toString().padStart(2, "0")}`;
   };
+
+  let statusUI = null;
+  if (posts.length >= MAX_POSTS) {
+    statusUI = (
+      <div className="status-bar done">
+        ✓ {posts.length} artículo{posts.length > 1 ? "s" : ""} publicado{posts.length > 1 ? "s" : ""}
+      </div>
+    );
+  } else if (countdown > 0) {
+    statusUI = (
+      <div className="status-bar waiting">
+        <span>⏱</span>
+        Próximo artículo en <strong>{formatCountdown(countdown)}</strong>
+        {isIncubating && <span style={{fontSize: '0.75rem', opacity: 0.6, marginLeft: '8px'}}>(Incubando en segundo plano...)</span>}
+        {incubatedPost && <span style={{fontSize: '0.75rem', opacity: 0.6, marginLeft: '8px'}}>(¡Listo para publicar!)</span>}
+      </div>
+    );
+  } else if (countdown === 0 && !incubatedPost) {
+    statusUI = (
+      <div className="status-bar generating">
+        <span className="pulse-dot" />
+        Finalizando detalles del artículo...
+      </div>
+    );
+  }
 
   if (selectedPost) {
     return (
@@ -241,23 +252,7 @@ export default function Blogs() {
         <p className="blog-hero-sub">Contenido SEO generado automáticamente con IA</p>
       </div>
 
-      {status === "generating" && (
-        <div className="status-bar generating">
-          <span className="pulse-dot" />
-          Generando artículo con IA...
-        </div>
-      )}
-      {status === "waiting" && countdown > 0 && (
-        <div className="status-bar waiting">
-          <span>⏱</span>
-          Próximo artículo en <strong>{formatCountdown(countdown)}</strong>
-        </div>
-      )}
-      {status === "done" && posts.length > 0 && (
-        <div className="status-bar done">
-          ✓ {posts.length} artículo{posts.length > 1 ? "s" : ""} publicado{posts.length > 1 ? "s" : ""}
-        </div>
-      )}
+      {statusUI}
 
       <div className="blog-grid">
         {posts.map((post) => (
@@ -288,24 +283,7 @@ export default function Blogs() {
             </div>
           </article>
         ))}
-
-        {loading && (
-          <div className="blog-card skeleton">
-            <div className="skeleton-img" />
-            <div className="card-body">
-              <div className="skeleton-line short" />
-              <div className="skeleton-line long" />
-              <div className="skeleton-line medium" />
-            </div>
-          </div>
-        )}
       </div>
-
-      {posts.length === 0 && !loading && (
-        <div className="empty-state">
-          <p>Los artículos aparecerán aquí automáticamente.</p>
-        </div>
-      )}
     </div>
   );
 }
