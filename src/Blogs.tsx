@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 
 // ─── CONFIGURA ESTO ────────────────────────────────────────────────────────────
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-const SITE_TOPIC = import.meta.env.VITE_SITE_TOPIC || "servicios web y diseño digital en Costa Rica";
+const SITE_TOPIC = import.meta.env.VITE_SITE_TOPIC || "tecnología y automatización en Costa Rica";
 const MAX_POSTS = 2;
 const INTERVAL_MS = 60 * 1000; // 1 minuto
 // ───────────────────────────────────────────────────────────────────────────────
@@ -30,6 +30,18 @@ function getCRTime(): string {
   });
 }
 
+declare const puter: any;
+
+async function generateImage(imagePrompt: string): Promise<string> {
+  try {
+    const imgElement = await puter.ai.txt2img(imagePrompt, { model: "dall-e-3" });
+    return imgElement.src;
+  } catch (error) {
+    console.error("Error generating image with Puter:", error);
+    return `https://picsum.photos/800/450?random=${Date.now()}`;
+  }
+}
+
 async function generatePost(topic: string, index: number): Promise<BlogPost> {
   const angles = [
     `tendencias actuales y consejos prácticos sobre "${topic}"`,
@@ -39,31 +51,26 @@ async function generatePost(topic: string, index: number): Promise<BlogPost> {
   ];
   const angle = angles[index % angles.length];
 
-  const prompt = `Eres un experto en SEO y marketing digital para el mercado costarricense. 
-Genera un artículo de blog COMPLETO en español, enfocado en: ${angle}.
+  const prompt = `Eres el mejor copywriter SEO de Latinoamérica con 15 años de experiencia posicionando negocios en Google. 
+Genera un artículo de blog EXCEPCIONAL en español para el mercado costarricense sobre: ${angle}.
 
-REGLAS:
-- Título: máximo 60 caracteres, con palabra clave principal al inicio
-- Meta description (excerpt): exactamente 150-160 caracteres, incluir llamada a la acción
-- Contenido: mínimo 600 palabras en HTML limpio (solo h2, h3, p, ul, li, strong)
-- Usar palabras clave de forma natural (densidad 1-2%)
-- Tono profesional pero cercano, orientado a pymes costarricenses
-- Incluir al menos 2 subtítulos h2 y 1 h3
-- Terminar con párrafo de conclusión
-- imagePrompt: Un prompt detallado en INGLÉS para generar una imagen fotorrealista con IA que ilustre el artículo con alta coherencia visual (ej: "A modern office desk with a laptop displaying growth charts, bright natural light, cinematic, photorealistic").
+ESTRUCTURA OBLIGATORIA DEL ARTÍCULO:
+- Título: Exactamente 55-60 caracteres. Debe incluir la keyword principal al inicio. Usar número o pregunta cuando aplique (ej: '7 Razones Por Qué...', '¿Cómo...?')
+- Meta description: Exactamente 155 caracteres. Debe generar urgencia o curiosidad. Incluir llamada a acción clara.
+- Introducción: Primer párrafo de alto impacto que enganche en las primeras 2 líneas. Mencionar el problema del lector.
+- Cuerpo: Mínimo 800 palabras en HTML limpio (h2, h3, p, ul, li, strong). Exactamente 3 secciones h2 y 2 h3.
+- Keyword density: 1.5% — incluir keyword principal y 3 variaciones semánticas de forma natural.
+- Cada sección h2 debe tener mínimo 2 párrafos y una lista ul o li.
+- Penúltimo párrafo: beneficios concretos y medibles para el lector.
+- Último párrafo: llamada a acción directa relacionada al negocio.
+- Internal linking hint: incluir 1 anchor text natural que diga 'conoce más sobre [tema relacionado]'
+- imagePrompt: Photorealistic professional photograph, [descripción exacta de lo que muestra la escena relacionada al artículo], [detalles de ambiente: lighting, time of day, location], shot with Canon EOS R5, 85mm lens, shallow depth of field, highly detailed, 8K resolution, commercial photography style, no text, no watermarks, vibrant colors, sharp focus
 - tags: array de 3 etiquetas cortas en español
 
-Responde ÚNICAMENTE con JSON válido, sin markdown ni backticks:
-{
-  "title": "...",
-  "excerpt": "...",
-  "content": "...",
-  "imagePrompt": "...",
-  "tags": ["...", "...", "..."]
-}`;
+TONO: Profesional pero cercano. Como si fuera un experto amigo dando consejos reales, no genérico.`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -71,7 +78,19 @@ Responde ÚNICAMENTE con JSON válido, sin markdown ni backticks:
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.8,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              title: { type: "STRING" },
+              excerpt: { type: "STRING" },
+              content: { type: "STRING" },
+              imagePrompt: { type: "STRING" },
+              tags: { type: "ARRAY", items: { type: "STRING" } }
+            },
+            required: ["title", "excerpt", "content", "imagePrompt", "tags"]
+          }
         },
       }),
     }
@@ -87,9 +106,7 @@ Responde ÚNICAMENTE con JSON válido, sin markdown ni backticks:
   const words = parsed.content.replace(/<[^>]+>/g, "").split(/\s+/).length;
   const readTime = `${Math.max(2, Math.ceil(words / 200))} min`;
 
-  // Usamos Pollinations AI para generar una imagen coherente basada en el prompt exacto de Gemini
-  const seed = encodeURIComponent(parsed.imagePrompt || "business technology modern office");
-  const imageUrl = `https://image.pollinations.ai/prompt/${seed}?width=800&height=450&nologo=true`;
+  const imageUrl = await generateImage(parsed.imagePrompt);
 
   return {
     id: `post-${Date.now()}-${index}`,
@@ -105,18 +122,18 @@ Responde ÚNICAMENTE con JSON válido, sin markdown ni backticks:
 
 const DEFAULT_POST: BlogPost = {
   id: "post-default-1",
-  title: "La importancia del diseño web profesional para tu negocio",
-  excerpt: "Descubre cómo un sitio web bien diseñado puede transformar tu negocio, atraer más clientes y destacar frente a la competencia en el mercado digital actual.",
-  content: "<h2>El impacto de la primera impresión digital</h2><p>En el mundo actual, tu sitio web es la vitrina principal de tu negocio. Los clientes buscan servicios en línea antes de tomar una decisión de compra. Un diseño web profesional no solo transmite confianza, sino que también facilita la navegación y mejora la experiencia del usuario.</p><h2>¿Por qué invertir en diseño web?</h2><p>Muchos negocios subestiman el poder de una buena presencia digital. Sin embargo, un sitio web optimizado ayuda a mejorar el posicionamiento en buscadores (SEO), lo que significa que más personas te encontrarán cuando busquen los servicios que ofreces.</p><ul><li><strong>Credibilidad:</strong> Un diseño moderno y limpio demuestra profesionalismo.</li><li><strong>Disponibilidad 24/7:</strong> Tu negocio siempre está abierto para recibir consultas.</li><li><strong>Alcance:</strong> Rompe las barreras geográficas y llega a nuevos mercados.</li></ul><h3>Conclusión</h3><p>Invertir en un diseño web profesional es invertir en el futuro de tu empresa. No dejes que tu competencia se lleve a tus clientes potenciales. ¡Es hora de dar el salto digital y consolidar tu presencia en línea!</p>",
-  imageUrl: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+  title: "Cómo la Inteligencia Artificial está transformando el mercado",
+  excerpt: "Descubre las últimas tendencias en tecnología y cómo la automatización puede optimizar procesos y mejorar la eficiencia en tu empresa.",
+  content: "<h2>El impacto de la nueva era digital</h2><p>En el mundo actual, la tecnología avanza a un ritmo sin precedentes. Las herramientas de inteligencia artificial están revolucionando la forma en que operamos, permitiendo automatizar tareas repetitivas y tomar decisiones basadas en datos.</p><h2>¿Por qué adoptar nuevas tecnologías?</h2><p>La adopción temprana de innovaciones tecnológicas ofrece una ventaja competitiva crucial. Las organizaciones que integran estas soluciones logran optimizar sus recursos y ofrecer mejores experiencias a sus usuarios.</p><ul><li><strong>Eficiencia:</strong> Reducción de tiempos en procesos operativos.</li><li><strong>Innovación:</strong> Capacidad de desarrollar nuevos modelos de servicio.</li><li><strong>Escalabilidad:</strong> Crecimiento sostenible apoyado en infraestructura digital.</li></ul><h3>Conclusión</h3><p>El futuro pertenece a quienes se adaptan al cambio. Integrar soluciones tecnológicas avanzadas ya no es un lujo, sino una necesidad para mantenerse relevante en un mercado en constante evolución.</p>",
+  imageUrl: "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
   createdAt: getCRTime(),
   readTime: "3 min",
-  tags: ["Diseño Web", "Estrategia", "Negocios"]
+  tags: ["Tecnología", "Innovación", "Futuro"]
 };
 
 export default function Blogs() {
   const [posts, setPosts] = useState<BlogPost[]>(() => {
-    const saved = localStorage.getItem("seo-blog-posts");
+    const saved = localStorage.getItem("seo-blog-posts-v2");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -133,7 +150,7 @@ export default function Blogs() {
   const [countdown, setCountdown] = useState(() => posts.length < MAX_POSTS ? INTERVAL_MS / 1000 : 0);
 
   useEffect(() => {
-    localStorage.setItem("seo-blog-posts", JSON.stringify(posts));
+    localStorage.setItem("seo-blog-posts-v2", JSON.stringify(posts));
   }, [posts]);
 
   // Incubadora: Genera el post en segundo plano si hace falta
@@ -146,7 +163,8 @@ export default function Blogs() {
         setIsIncubating(false);
       }).catch(e => {
         console.error("Error incubando post:", e);
-        setIsIncubating(false);
+        // Esperar un poco antes de reintentar para evitar bucles infinitos rápidos
+        setTimeout(() => setIsIncubating(false), 5000);
       });
     }
   }, [posts.length, incubatedPost, isIncubating]);
@@ -229,7 +247,8 @@ export default function Blogs() {
           <img
             src={selectedPost.imageUrl}
             alt={selectedPost.title}
-            className="article-hero-img"
+            className="article-hero-img skeleton-img-bg"
+            onLoad={(e) => (e.target as HTMLImageElement).classList.remove('skeleton-img-bg')}
             onError={(e) => {
               (e.target as HTMLImageElement).src = `https://picsum.photos/800/450?random=${selectedPost.id}`;
             }}
@@ -261,7 +280,8 @@ export default function Blogs() {
               <img
                 src={post.imageUrl}
                 alt={post.title}
-                className="card-img"
+                className="card-img skeleton-img-bg"
+                onLoad={(e) => (e.target as HTMLImageElement).classList.remove('skeleton-img-bg')}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = `https://picsum.photos/600/340?random=${post.id}`;
                 }}
@@ -321,6 +341,7 @@ const blogStyles = `
   .skeleton-line.short { width: 40%; }
   .skeleton-line.long { width: 90%; }
   .skeleton-line.medium { width: 65%; }
+  .skeleton-img-bg { background: linear-gradient(90deg, #1a1a1a 25%, #222 50%, #1a1a1a 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; color: transparent; }
   @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   .empty-state { text-align: center; color: #555; font-family: sans-serif; padding: 60px 20px; }
   @media (max-width: 480px) { .blog-grid { grid-template-columns: 1fr; } }
