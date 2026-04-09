@@ -4,7 +4,7 @@
  */
 
 import * as React from 'react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, Component, type ErrorInfo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, ArrowRight, Cpu, BarChart3, Zap, ShieldCheck, Quote, Star, Check, X, Instagram, Twitter, Linkedin, Mail, Phone, MapPin, Facebook } from 'lucide-react';
 import Hls from 'hls.js';
@@ -17,6 +17,39 @@ function cn(...inputs: ClassValue[]) {
 }
 
 // --- Components ---
+
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
+  state = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error caught by ErrorBoundary:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#070612] text-beige flex flex-col items-center justify-center p-6 text-center">
+          <h2 className="text-2xl font-bold mb-4">Algo salió mal.</h2>
+          <p className="text-beige/60 mb-6 max-w-md">
+            Ha ocurrido un error inesperado en la aplicación. Por favor, recarga la página.
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-beige text-[#070612] rounded-full font-medium"
+          >
+            Recargar página
+          </button>
+        </div>
+      );
+    }
+
+    return (this as any).props.children;
+  }
+}
 
 const BlurIn = ({ 
   children, 
@@ -599,6 +632,14 @@ const Footer = () => {
 };
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <MainApp />
+    </ErrorBoundary>
+  );
+}
+
+function MainApp() {
   const [showBlog, setShowBlog] = useState(false);
 
   if (showBlog) {

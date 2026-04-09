@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 // ─── CONFIGURA ESTO ────────────────────────────────────────────────────────────
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const SITE_TOPIC = import.meta.env.VITE_SITE_TOPIC || "tecnología y automatización en Costa Rica";
-const MAX_POSTS = 2;
+const MAX_POSTS = 3;
 const INTERVAL_MS = 60 * 1000; // 1 minuto
 // ───────────────────────────────────────────────────────────────────────────────
 
@@ -30,16 +30,45 @@ function getCRTime(): string {
   });
 }
 
-declare const puter: any;
-
 async function generateImage(imagePrompt: string): Promise<string> {
-  try {
-    const imgElement = await puter.ai.txt2img(imagePrompt, { model: "dall-e-3" });
-    return imgElement.src;
-  } catch (error) {
-    console.error("Error generating image with Puter:", error);
-    return `https://picsum.photos/800/450?random=${Date.now()}`;
-  }
+  // Usando Pollinations AI: gratis, ilimitado, sin keys y sin popups
+  const encodedPrompt = encodeURIComponent(imagePrompt);
+  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=450&nologo=true`;
+}
+
+async function getFallbackPost(topic: string, index: number): Promise<BlogPost> {
+  const fallbackPosts = [
+    {
+      title: "El auge de la automatización en " + topic,
+      excerpt: "Descubre cómo la automatización está redefiniendo los procesos operativos y mejorando la eficiencia a niveles sin precedentes.",
+      content: "<h2>La nueva era de la eficiencia</h2><p>La automatización ha dejado de ser una opción para convertirse en una necesidad. Las empresas que adoptan estas tecnologías están viendo mejoras significativas en sus tiempos de respuesta y reducción de costos operativos.</p><p>Implementar sistemas automatizados permite a los equipos enfocarse en tareas estratégicas de alto valor, dejando el trabajo repetitivo a las máquinas.</p><h2>Beneficios tangibles</h2><p>Los resultados de la automatización son medibles y directos. Desde la atención al cliente hasta la gestión de inventarios, el impacto es profundo.</p><ul><li>Reducción de errores humanos.</li><li>Operación continua 24/7.</li><li>Análisis de datos en tiempo real.</li></ul><h3>El siguiente paso</h3><p>Prepararse para esta transición requiere una auditoría completa de los procesos actuales. Identificar cuellos de botella es el primer paso hacia una transformación digital exitosa.</p><p>No te quedes atrás en la carrera tecnológica. Empieza a evaluar qué procesos en tu empresa pueden beneficiarse de la automatización hoy mismo.</p>",
+      imagePrompt: "futuristic automated factory or digital workflow glowing lines 8k",
+      tags: ["Automatización", "Eficiencia", "Futuro"]
+    },
+    {
+      title: "Inteligencia Artificial y el futuro de " + topic,
+      excerpt: "La IA está cambiando las reglas del juego. Aprende cómo esta tecnología predictiva está anticipando las necesidades del mercado.",
+      content: "<h2>Predicción y análisis avanzado</h2><p>La verdadera revolución de la Inteligencia Artificial no es solo automatizar, sino predecir. Los algoritmos actuales pueden analizar enormes volúmenes de datos para anticipar tendencias de mercado antes de que ocurran.</p><p>Esta capacidad predictiva permite a las empresas ajustar sus estrategias en tiempo real, ofreciendo productos y servicios exactamente cuando el cliente los necesita.</p><h2>Personalización a gran escala</h2><p>Otro aspecto fundamental es la hiper-personalización. La IA permite crear experiencias únicas para cada usuario, basadas en su historial y comportamiento.</p><ul><li>Recomendaciones precisas.</li><li>Interfaces adaptativas.</li><li>Comunicación proactiva.</li></ul><h3>Adopción estratégica</h3><p>Integrar IA requiere más que solo tecnología; requiere un cambio cultural en la organización. La toma de decisiones debe volverse verdaderamente basada en datos.</p><p>El momento de explorar soluciones de IA es ahora. Las herramientas son más accesibles que nunca y el retorno de inversión justifica la innovación.</p>",
+      imagePrompt: "artificial intelligence glowing brain network connections 8k",
+      tags: ["IA", "Predicción", "Innovación"]
+    }
+  ];
+
+  const fallback = fallbackPosts[index % fallbackPosts.length];
+  const imageUrl = await generateImage(fallback.imagePrompt);
+  const words = fallback.content.replace(/<[^>]+>/g, "").split(/\s+/).length;
+  const readTime = `${Math.max(2, Math.ceil(words / 200))} min`;
+
+  return {
+    id: `post-fallback-${Date.now()}-${index}`,
+    title: fallback.title,
+    excerpt: fallback.excerpt,
+    content: fallback.content,
+    imageUrl,
+    createdAt: getCRTime(),
+    readTime,
+    tags: fallback.tags,
+  };
 }
 
 async function generatePost(topic: string, index: number): Promise<BlogPost> {
@@ -51,89 +80,117 @@ async function generatePost(topic: string, index: number): Promise<BlogPost> {
   ];
   const angle = angles[index % angles.length];
 
-  const prompt = `Eres el mejor copywriter SEO de Latinoamérica con 15 años de experiencia posicionando negocios en Google. 
-Genera un artículo de blog EXCEPCIONAL en español para el mercado costarricense sobre: ${angle}.
+  const prompt = `Eres el analista de tendencias digitales y copywriter SEO más avanzado del mundo. Tienes acceso a información en tiempo real.
+Tu objetivo es realizar una investigación PROFUNDA sobre las tendencias actuales en internet, específicamente en el sector de "${topic}" en Costa Rica y a nivel global.
+No te bases solo en lo que ya sabes; simula un análisis de datos en vivo de búsquedas, comportamiento de usuarios y patrones de la web.
+Con base en esta investigación, DEBES ANTICIPAR con un 100% de seguridad cuál será la tendencia número 1 de búsqueda e información MAÑANA en este sector.
+
+Escribe un artículo de blog EXCEPCIONAL basado EXCLUSIVAMENTE en esta tendencia predictiva que acabas de descubrir.
 
 ESTRUCTURA OBLIGATORIA DEL ARTÍCULO:
-- Título: Exactamente 55-60 caracteres. Debe incluir la keyword principal al inicio. Usar número o pregunta cuando aplique (ej: '7 Razones Por Qué...', '¿Cómo...?')
-- Meta description: Exactamente 155 caracteres. Debe generar urgencia o curiosidad. Incluir llamada a acción clara.
-- Introducción: Primer párrafo de alto impacto que enganche en las primeras 2 líneas. Mencionar el problema del lector.
-- Cuerpo: Mínimo 800 palabras en HTML limpio (h2, h3, p, ul, li, strong). Exactamente 3 secciones h2 y 2 h3.
-- Keyword density: 1.5% — incluir keyword principal y 3 variaciones semánticas de forma natural.
-- Cada sección h2 debe tener mínimo 2 párrafos y una lista ul o li.
-- Penúltimo párrafo: beneficios concretos y medibles para el lector.
-- Último párrafo: llamada a acción directa relacionada al negocio.
-- Internal linking hint: incluir 1 anchor text natural que diga 'conoce más sobre [tema relacionado]'
-- imagePrompt: Photorealistic professional photograph, [descripción exacta de lo que muestra la escena relacionada al artículo], [detalles de ambiente: lighting, time of day, location], shot with Canon EOS R5, 85mm lens, shallow depth of field, highly detailed, 8K resolution, commercial photography style, no text, no watermarks, vibrant colors, sharp focus
-- tags: array de 3 etiquetas cortas en español
+- Título: Exactamente 55-60 caracteres. Debe incluir la keyword principal de la tendencia al inicio.
+- Meta description: Exactamente 155 caracteres. Debe generar urgencia sobre esta nueva tendencia.
+- Introducción: Primer párrafo de alto impacto. Revela la tendencia que dominará mañana y por qué el lector debe actuar hoy.
+- Cuerpo: Aproximadamente 400-500 palabras en HTML limpio (h2, h3, p, ul, li, strong). Exactamente 3 secciones h2 y 1 h3. NO LO HAGAS CORTO.
+- Keyword density: 1.5% — incluir la keyword principal de la tendencia y 3 variaciones semánticas.
+- Cada sección h2 debe tener mínimo 2 párrafos completos y una lista ul o li.
+- Penúltimo párrafo: beneficios concretos de anticiparse a esta tendencia.
+- Último párrafo: llamada a acción directa.
+- imagePrompt: Crea un prompt en inglés para generar una imagen fotorrealista espectacular que represente esta tendencia exacta. Debe ser muy descriptivo, estilo fotografía comercial 8K.
+- tags: array de 3 etiquetas cortas en español relacionadas a la tendencia.
 
-TONO: Profesional pero cercano. Como si fuera un experto amigo dando consejos reales, no genérico.`;
+TONO: Visionario, experto, urgente y profesional.
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.8,
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              title: { type: "STRING" },
-              excerpt: { type: "STRING" },
-              content: { type: "STRING" },
-              imagePrompt: { type: "STRING" },
-              tags: { type: "ARRAY", items: { type: "STRING" } }
-            },
-            required: ["title", "excerpt", "content", "imagePrompt", "tags"]
-          }
-        },
-      }),
+IMPORTANTE: DEBES RESPONDER ÚNICAMENTE CON UN OBJETO JSON VÁLIDO. NO INCLUYAS TEXTO FUERA DEL JSON.
+ESTRUCTURA DEL JSON:
+{
+  "title": "string",
+  "excerpt": "string (meta description)",
+  "content": "string (HTML)",
+  "imagePrompt": "string",
+  "tags": ["string", "string", "string"]
+}`;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const options = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      tools: [{ googleSearch: {} }],
+      generationConfig: {
+        temperature: 0.8,
+        maxOutputTokens: 8192,
+      },
+    }),
+  };
+
+  let res = await fetch(url, options);
+
+  // Reintento automático si se alcanza el límite de peticiones (Error 429)
+  if (res.status === 429) {
+    console.warn("Límite de peticiones alcanzado (Error 429). Esperando 15 segundos antes de reintentar...");
+    await new Promise(resolve => setTimeout(resolve, 15000));
+    res = await fetch(url, options);
+  }
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "Unknown error");
+    console.error(`Gemini API Error (${res.status}):`, errorText);
+    
+    // Si es un error de cuota o límite que persiste, usamos un post de respaldo
+    if (res.status === 429 || errorText.toLowerCase().includes("quota")) {
+      console.warn("Cuota excedida o límite de peticiones. Usando post de respaldo.");
+      return getFallbackPost(topic, index);
     }
-  );
-
-  if (!res.ok) throw new Error(`Gemini error: ${res.status}`);
+    
+    throw new Error(`Gemini error: ${res.status} - ${errorText}`);
+  }
 
   const data = await res.json();
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   const clean = raw.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
+  
+  let parsed;
+  try {
+    parsed = JSON.parse(clean);
+  } catch (e) {
+    console.warn("JSON Parse Warning. Using fallback content.");
+    return getFallbackPost(topic, index);
+  }
 
-  const words = parsed.content.replace(/<[^>]+>/g, "").split(/\s+/).length;
+  const content = parsed.content || "<p>Contenido no disponible.</p>";
+  const words = content.replace(/<[^>]+>/g, "").split(/\s+/).length;
   const readTime = `${Math.max(2, Math.ceil(words / 200))} min`;
 
-  const imageUrl = await generateImage(parsed.imagePrompt);
+  const imageUrl = await generateImage(parsed.imagePrompt || "technology, digital marketing, modern business");
 
   return {
     id: `post-${Date.now()}-${index}`,
-    title: parsed.title,
-    excerpt: parsed.excerpt,
-    content: parsed.content,
+    title: parsed.title || "Artículo sin título",
+    excerpt: parsed.excerpt || "Sin descripción.",
+    content: content,
     imageUrl,
     createdAt: getCRTime(),
     readTime,
-    tags: parsed.tags || [],
+    tags: parsed.tags || ["Tecnología", "Negocios"],
   };
 }
 
 const DEFAULT_POST: BlogPost = {
   id: "post-default-1",
-  title: "Cómo la Inteligencia Artificial está transformando el mercado",
-  excerpt: "Descubre las últimas tendencias en tecnología y cómo la automatización puede optimizar procesos y mejorar la eficiencia en tu empresa.",
-  content: "<h2>El impacto de la nueva era digital</h2><p>En el mundo actual, la tecnología avanza a un ritmo sin precedentes. Las herramientas de inteligencia artificial están revolucionando la forma en que operamos, permitiendo automatizar tareas repetitivas y tomar decisiones basadas en datos.</p><h2>¿Por qué adoptar nuevas tecnologías?</h2><p>La adopción temprana de innovaciones tecnológicas ofrece una ventaja competitiva crucial. Las organizaciones que integran estas soluciones logran optimizar sus recursos y ofrecer mejores experiencias a sus usuarios.</p><ul><li><strong>Eficiencia:</strong> Reducción de tiempos en procesos operativos.</li><li><strong>Innovación:</strong> Capacidad de desarrollar nuevos modelos de servicio.</li><li><strong>Escalabilidad:</strong> Crecimiento sostenible apoyado en infraestructura digital.</li></ul><h3>Conclusión</h3><p>El futuro pertenece a quienes se adaptan al cambio. Integrar soluciones tecnológicas avanzadas ya no es un lujo, sino una necesidad para mantenerse relevante en un mercado en constante evolución.</p>",
-  imageUrl: "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+  title: "El Futuro del Diseño Web en CR: Tendencias de Mañana",
+  excerpt: "Descubre la tendencia número uno que dominará las búsquedas web en Costa Rica a partir de mañana. Anticípate y domina tu sector.",
+  content: "<h2>La revolución de la Web Inmersiva y Predictiva</h2><p>El análisis de datos en tiempo real nos indica un cambio drástico en el comportamiento del consumidor costarricense. Ya no basta con tener una página web informativa; los usuarios ahora exigen experiencias inmersivas y predictivas. La tendencia que explotará mañana en los motores de búsqueda es la integración de interfaces adaptativas impulsadas por IA que se anticipan a lo que el usuario quiere antes de que haga clic.</p><p>Las empresas que no adopten este modelo quedarán rezagadas rápidamente. La velocidad de carga y la personalización extrema son los nuevos estándares. Si tu sitio web no está aprendiendo del comportamiento de tus visitantes en tiempo real, estás perdiendo conversiones valiosas cada segundo.</p><h2>Micro-interacciones y Diseño Emocional</h2><p>Otra métrica que está mostrando un crecimiento exponencial en las búsquedas es el diseño emocional a través de micro-interacciones. Los usuarios buscan validación instantánea y respuestas visuales satisfactorias al interactuar con plataformas digitales.</p><p>Implementar estas estrategias no es solo una cuestión de estética, sino de retención pura. Un usuario que siente que la interfaz 'le responde' de manera fluida y humana tiene un 40% más de probabilidades de completar una compra o dejar sus datos.</p><ul><li><strong>Animaciones con propósito:</strong> Guiar el ojo del usuario hacia la conversión.</li><li><strong>Feedback háptico simulado:</strong> Respuestas visuales que imitan la sensación táctil.</li><li><strong>Carga progresiva inteligente:</strong> Mostrar primero lo que el usuario más necesita.</li></ul><h2>El SEO del Mañana: Búsqueda Semántica Avanzada</h2><p>Las palabras clave tradicionales están muriendo. La tendencia inminente es la optimización para la búsqueda semántica y conversacional. Los motores de búsqueda ahora entienden el contexto y la intención mucho mejor que antes.</p><p>Para dominar este nuevo panorama, tu contenido debe responder preguntas complejas de manera natural y estructurada. La anticipación es clave: debes responder a la duda del usuario antes de que termine de formularla en su mente.</p><h3>Actúa Hoy, Domina Mañana</h3><p>Anticiparse a estas tendencias no es una opción, es la única estrategia viable de supervivencia digital. Al implementar interfaces predictivas y diseño emocional hoy, te aseguras de capturar la ola de tráfico que se generará mañana.</p><p>No esperes a que tu competencia marque el paso. Contáctanos hoy mismo para auditar tu presencia digital y prepararla para las exigencias del mercado del mañana. El futuro es ahora.</p>",
+  imageUrl: "https://image.pollinations.ai/prompt/Futuristic%20holographic%20web%20design%20interface%20glowing%20in%20a%20dark%20modern%20office%20in%20Costa%20Rica%208k%20resolution?width=800&height=450&nologo=true",
   createdAt: getCRTime(),
-  readTime: "3 min",
-  tags: ["Tecnología", "Innovación", "Futuro"]
+  readTime: "4 min",
+  tags: ["Tendencias Web", "IA Predictiva", "Futuro Digital"]
 };
 
 export default function Blogs() {
   const [posts, setPosts] = useState<BlogPost[]>(() => {
-    const saved = localStorage.getItem("seo-blog-posts-v2");
+    const saved = localStorage.getItem("seo-blog-posts-v6");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -150,7 +207,7 @@ export default function Blogs() {
   const [countdown, setCountdown] = useState(() => posts.length < MAX_POSTS ? INTERVAL_MS / 1000 : 0);
 
   useEffect(() => {
-    localStorage.setItem("seo-blog-posts-v2", JSON.stringify(posts));
+    localStorage.setItem("seo-blog-posts-v6", JSON.stringify(posts));
   }, [posts]);
 
   // Incubadora: Genera el post en segundo plano si hace falta
@@ -163,8 +220,8 @@ export default function Blogs() {
         setIsIncubating(false);
       }).catch(e => {
         console.error("Error incubando post:", e);
-        // Esperar un poco antes de reintentar para evitar bucles infinitos rápidos
-        setTimeout(() => setIsIncubating(false), 5000);
+        // Esperar más tiempo (20 segundos) antes de reintentar para evitar saturar la API
+        setTimeout(() => setIsIncubating(false), 20000);
       });
     }
   }, [posts.length, incubatedPost, isIncubating]);
